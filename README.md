@@ -1,4 +1,4 @@
-# grid-cleaner-game
+# grid_cleaner_game
 The objective of this straightforward C console game is to clean every tile by moving around a grid.
 The purpose of this project was to practice using arrays, loops, functions, and fundamental game logic in C.
 
@@ -16,6 +16,14 @@ The purpose of this project was to practice using arrays, loops, functions, and 
 
 ---
 
+## 📚 Concepts Practiced
+-	Arrays and indexing
+-	Loops and conditionals
+-	Functions and modular programming
+-	Handling user input in C
+
+---
+
 ## ⚙️ How to Compile & Run
 Make sure you have **GCC** installed
 
@@ -25,11 +33,3 @@ gcc grid_cleaner.c -o grid_cleaner
 
 # Run
 ./grid_cleaner
-
----
-
-## 📚 Concepts Practiced
-	-	Arrays and indexing
-	-	Loops and conditionals
-	-	Functions and modular programming
-	-	Handling user input in C
