@@ -3,19 +3,6 @@ grid_cleaner.c
 A simple grid "robot vacuum" game.
 Player cleans all dirt tiles while avoiding walls.
 
-Controls during setup:
-w r c         -> place Wall at (r c)
-d r c         -> place Dirt at (r c)
-h r c         -> place Charger at (r c)
-L r1 c1 r2 c2 -> draw straight Line of walls (row- or col-aligned)
-q             -> finish setup
-
-Controls during play:
-w a s d  -> move (wrap around edges; can't pass walls)
-b        -> show battery
-r        -> recharge if standing on a charger
-c        -> show moves so far
-
 Win condition: all dirt cleaned.
 */
 
