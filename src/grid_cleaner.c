@@ -14,23 +14,23 @@ Win condition: all dirt cleaned.
 
 // Base tile types
 enum base {
-    BASE_EMPTY = 0,
-    BASE_WALL  = 1,
-    BASE_CHARGER = 2
+    BASE_EMPTY = 0,     // free space
+    BASE_WALL  = 1,     // wall blocks movement
+    BASE_CHARGER = 2    // charger tile restores battery
 };
 
 // One tile on the board
 struct tile {
-    enum base base;
-    int dirt; // 1 = dirty, 0 = clean
+    enum base base;     // wall / empty / charger
+    int dirt;           // 1 = dirty, 0 = clean
 };
 
 // Player state
 struct player {
     int row;
     int col;
-    int moves;
-    int battery; // 0..100
+    int moves;          // number of moves taken
+    int battery;        // battery percentage (0–100)
 };
 
 // Prototypes
@@ -58,10 +58,12 @@ int main(void) {
     struct tile board[ROWS][COLS];
     init_board(board);
 
+    // level setup phase (player builds their own grid)
     printf("=== Grid Cleaner: Setup ===\n");
     print_board(board, (struct player){-1,-1,0,0});
     do_setup(board);
 
+    // ask player for starting position and validate
     int sr, sc;
     printf("Enter robot starting position: ");
     scanf("%d %d", &sr, &sc);
@@ -71,6 +73,7 @@ int main(void) {
         scanf("%d %d", &sr, &sc);
     }
 
+    // initialize player and begin play
     struct player p = make_player(sr, sc);
     printf("\n=== Starting Grid Cleaner! ===\n");
     print_board(board, p);
@@ -79,53 +82,65 @@ int main(void) {
     return 0;
 }
 
-// Setup and play loops -----------------------------------------------------------------------------------
+// Setup Phase: player builds a custom level --------------------------------------------------------------
 void do_setup(struct tile board[ROWS][COLS]) {
     char cmd;
     while (scanf(" %c", &cmd) != EOF) {
         if (cmd == 'q') {
+            // quit setup mode
             break;
         } else if (cmd == 'w' || cmd == 'd' || cmd == 'h') {
+            // single-cell commands
             int r, c;
             scanf("%d %d", &r, &c);
             if (!in_bounds(r, c)) {
                 printf("Location out of bounds\n");
             } else {
                 if (cmd == 'w') {
+                    // place wall
                     board[r][c].base = BASE_WALL;
-                    board[r][c].dirt = 0; // walls cannot be dirty
+                    board[r][c].dirt = 0; 
                 } else if (cmd == 'd') {
+                    // place dirt (only if not wall)
                     if (board[r][c].base != BASE_WALL) {
-                        board[r][c].dirt = 1; // mark as dirty
+                        board[r][c].dirt = 1;
                     }
                 } else if (cmd == 'h') {
+                    // place charger (only if not wall)
                     if (board[r][c].base != BASE_WALL) {
                         board[r][c].base = BASE_CHARGER;
                     }
                 }
             }
         } else if (cmd == 'L') {
+            // place line of walls (horizontal or vertical)
             int r1, c1, r2, c2;
             scanf("%d %d %d %d", &r1, &c1, &r2, &c2);
             if (!clamp_line_to_board(&r1, &c1, &r2, &c2)) {
                 printf("Location out of bounds\n");
+                continue;       // skip placing if fully outside
             }
             place_line(board, r1, c1, r2, c2);
         }
+        // print board after every command
         print_board(board, (struct player){-1,-1,0,0});
     }
 }
 
+// Game Phase: player moves robot and cleans dirt
 void play_game(struct tile board[ROWS][COLS], struct player p) {
-    char dir;
+   char dir;
     while (scanf(" %c", &dir) != EOF) {
         if (dir == 'b') {
+            // show battery percentage
             printf("Battery: %d%%\n", p.battery);
             continue;
         } else if (dir == 'c') {
+            // show move count
             printf("Moves: %d\n", p.moves);
             continue;
         } else if (dir == 'r') {
+            // recharge if standing on a charger
             if (board[p.row][p.col].base == BASE_CHARGER) {
                 p.battery = 100;
                 printf("Recharged to 100%%.\n");
@@ -135,6 +150,7 @@ void play_game(struct tile board[ROWS][COLS], struct player p) {
             print_board(board, p);
             continue;
         } else if (dir=='w' || dir=='a' || dir=='s' || dir=='d') {
+            // movement
             if (p.battery <= 0) {
                 printf("Battery empty — move to a charger and press 'r'.\n");
                 print_board(board, p);
@@ -143,10 +159,11 @@ void play_game(struct tile board[ROWS][COLS], struct player p) {
             struct player np = step(board, p, dir);
             p = np;
         } else {
-            // ignore unknown keys
+            // ignore any unknown keys
             continue;
         }
 
+        // win check
         if (!any_dirt_left(board)) {
             print_board(board, p);
             if (p.moves == 1) {
@@ -162,6 +179,7 @@ void play_game(struct tile board[ROWS][COLS], struct player p) {
 
 // Movement and rules --------------------------------------------------------------------------------------
 struct player step(struct tile board[ROWS][COLS], struct player p, char dir) {
+    // calculate next row/col
     int nr = p.row;
     int nc = p.col;
 
@@ -170,19 +188,20 @@ struct player step(struct tile board[ROWS][COLS], struct player p, char dir) {
     if (dir == 'a') nc--;
     if (dir == 'd') nc++;
 
-    // wrap-around
+    // wrap around at edges
     if (nr < 0) nr = ROWS - 1;
     if (nr >= ROWS) nr = 0;
     if (nc < 0) nc = COLS - 1;
     if (nc >= COLS) nc = 0;
 
+    // check if move is valid
     if (try_move(board, nr, nc)) {
         p.row = nr;
         p.col = nc;
         p.moves++;
         p.battery--;
 
-        // clean if dirty
+        // clean dirt if present
         if (board[p.row][p.col].dirt == 1) {
             board[p.row][p.col].dirt = 0;
         }
@@ -191,13 +210,16 @@ struct player step(struct tile board[ROWS][COLS], struct player p, char dir) {
 }
 
 int try_move(struct tile board[ROWS][COLS], int new_r, int new_c) {
+    // out of bounds
     if (!in_bounds(new_r, new_c)) return 0;
+    // blocked by wall
     if (board[new_r][new_c].base == BASE_WALL) return 0;
     return 1;
 }
 
 // Board rules --------------------------------------------------------------------------------------------
 void init_board(struct tile board[ROWS][COLS]) {
+    // reset all tiles to empty & clean
     for (int i = 0; i < ROWS; i++) {
         for (int j = 0; j < COLS; j++) {
             board[i][j].base = BASE_EMPTY;
@@ -207,15 +229,17 @@ void init_board(struct tile board[ROWS][COLS]) {
 }
 
 int in_bounds(int r, int c) {
+    // return true if inside grid
     return !(r < 0 || r >= ROWS || c < 0 || c >= COLS);
 }
 
 int clamp_line_to_board(int *r1, int *c1, int *r2, int *c2) {
-    // If both endpoints are fully out-of-bounds in both dimensions, reject.
+    // if both endpoints are completely outside, reject
     int all_out_rows = (*r1 < 0 && *r2 < 0) || (*r1 >= ROWS && *r2 >= ROWS);
     int all_out_cols = (*c1 < 0 && *c2 < 0) || (*c1 >= COLS && *c2 >= COLS);
     if (all_out_rows && all_out_cols) return 0;
 
+    // clamp each endpoint to within board range
     if (*r1 < 0) *r1 = 0;
     if (*r1 >= ROWS) *r1 = ROWS - 1;
     if (*r2 < 0) *r2 = 0;
@@ -230,12 +254,14 @@ int clamp_line_to_board(int *r1, int *c1, int *r2, int *c2) {
 }
 
 void place_line(struct tile board[ROWS][COLS], int r1, int c1, int r2, int c2) {
+    // horizontal line
     if (r1 == r2) {
         if (c1 > c2) { int t=c1; c1=c2; c2=t; }
         for (int c = c1; c <= c2; c++) {
             board[r1][c].base = BASE_WALL;
             board[r1][c].dirt = 0;
         }
+    // vertical line
     } else if (c1 == c2) {
         if (r1 > r2) { int t=r1; r1=r2; r2=t; }
         for (int r = r1; r <= r2; r++) {
@@ -243,12 +269,12 @@ void place_line(struct tile board[ROWS][COLS], int r1, int c1, int r2, int c2) {
             board[r][c1].dirt = 0;
         }
     } else {
-        // Only straight lines supported (simple for beginners)
         printf("Only straight lines are supported.\n");
     }
 }
 
 int any_dirt_left(struct tile board[ROWS][COLS]) {
+    // scan for remaining dirt
     for (int i = 0; i < ROWS; i++) {
         for (int j = 0; j < COLS; j++) {
             if (board[i][j].dirt == 1) return 1;
@@ -258,12 +284,14 @@ int any_dirt_left(struct tile board[ROWS][COLS]) {
 }
 
 int valid_start(struct tile board[ROWS][COLS], int r, int c) {
+    // valid if inside board and not a wall
     if (!in_bounds(r, c)) return 0;
     if (board[r][c].base == BASE_WALL) return 0;
     return 1;
 }
 
 struct player make_player(int r, int c) {
+    // create new player object
     struct player p;
     p.row = r;
     p.col = c;
@@ -281,7 +309,7 @@ void print_border(void) {
 }
 
 void print_board(struct tile board[ROWS][COLS], struct player p) {
-    // Title
+    // title
     print_border();
     const char *title = " G R I D   C L E A N E R ";
     int len = COLS * 4 + 1;
@@ -292,6 +320,7 @@ void print_board(struct tile board[ROWS][COLS], struct player p) {
     for (int i = 0; i < (n_white + 1) / 2; i++) printf(" ");
     printf("|\n");
 
+    // print each row of the board
     for (int r = 0; r < ROWS; r++) {
         print_border();
         for (int c = 0; c < COLS; c++) {
